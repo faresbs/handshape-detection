@@ -91,10 +91,14 @@ if __name__ == '__main__':
 	image_size = 224
 
 	#Classification threshold
-	threshold = 0.3
+	threshold = 0.2
 
 	#Empty label
 	empty='None'
+
+	#add some space for the detected bounding box
+	#WHY THE BUG FOR LARGE VALUES ???
+	add_bbox = 10
 
 	while True:
 
@@ -115,12 +119,29 @@ if __name__ == '__main__':
 		y1s = []
 		for i in range(boxes.size(0)):
 		    box = boxes[i, :]
-		   
+
+		    cv2.rectangle(frame, (box[0] - add_bbox, box[1] - add_bbox), (box[2]+add_bbox, box[3]+add_bbox), (255, 255, 0), 2)
+
 		    #Transform from tensor to int
-		    x1 = int(box[0])
-		    y1 = int(box[1])
-		    x2 = int(box[2])
-		    y2 = int(box[3])
+		    x1 = int(box[0]) - add_bbox
+		    y1 = int(box[1]) - add_bbox
+		    x2 = int(box[2]) + add_bbox
+		    y2 = int(box[3]) + add_bbox
+
+		    #height or width must not exceed the limit or be negative
+
+		    if x1 < 0:
+		    	x1 = 0
+
+		    if x2 > frame.shape[1]:
+		    	x2 = frame.shape[1]
+
+		    if y1 < 0:
+		    	y1 = 0
+
+		    if y2 > frame.shape[0]:
+		    	y2 = frame.shape[0]
+
 
 		    images.append(frame[y1:y2, x1:x2])
 		    x1s.append(x1)
@@ -158,7 +179,7 @@ if __name__ == '__main__':
 
 
 			#THERE IS A PROBLEM HERE 
-			cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), fontColor, lineType)
+			#cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), fontColor, lineType)
 		    
 			cv2.putText(frame, prediction, (x1s[i] + 10, y1s[i] + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)  
 
@@ -172,12 +193,18 @@ if __name__ == '__main__':
 		print ("FPS: {:.2f}, Found {:d} objects".format(running_time, len(probs)))
 		#cv2.putText(frame, running_time, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255),2)  
 
-		#we can flip the frame here so that it wont be weird
+		
 		#Show results
+		#frame = cv2.flip(frame, 1)
 		cv2.imshow("Video Stream", frame)
+
 
 		#PRESS Q TO QUIT
 		if cv2.waitKey(1) & 0xFF == ord('q'):
 			break
+
+	# When everything done, release the capture
+	video_capture.release()
+	cv2.destroyAllWindows()
 
 		
