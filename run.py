@@ -42,7 +42,7 @@ def prep_image(image, input_dim, CUDA):
 if __name__ == '__main__':
 
 	if len(sys.argv) < 3:
-		print('Usage: python run_ssd_example.py <detection model path>  <detection labels path>  <classification model path>')
+		print('Usage: python run.py <detection model path>  <detection labels path>  <classification model path>')
 		sys.exit(0)
 	detection_path = sys.argv[1]
 	label_detection_path = sys.argv[2]
@@ -97,8 +97,7 @@ if __name__ == '__main__':
 	empty='None'
 
 	#add some space for the detected bounding box
-	#WHY THE BUG FOR LARGE VALUES ???
-	add_bbox = 10
+	add_bbox = 20
 
 	while True:
 
@@ -117,10 +116,9 @@ if __name__ == '__main__':
 		images = []
 		x1s = []
 		y1s = []
+
 		for i in range(boxes.size(0)):
 		    box = boxes[i, :]
-
-		    cv2.rectangle(frame, (box[0] - add_bbox, box[1] - add_bbox), (box[2]+add_bbox, box[3]+add_bbox), (255, 255, 0), 2)
 
 		    #Transform from tensor to int
 		    x1 = int(box[0]) - add_bbox
@@ -128,7 +126,7 @@ if __name__ == '__main__':
 		    x2 = int(box[2]) + add_bbox
 		    y2 = int(box[3]) + add_bbox
 
-		    #height or width must not exceed the limit or be negative
+		    #coords must not exceed the limit of the frame or be negative
 
 		    if x1 < 0:
 		    	x1 = 0
@@ -143,47 +141,45 @@ if __name__ == '__main__':
 		    	y2 = frame.shape[0]
 
 
-		    images.append(frame[y1:y2, x1:x2])
-		    x1s.append(x1)
-		    y1s.append(y1)
+		    #images.append(frame[y1:y2, x1:x2])
+		    #x1s.append(x1)
+		    #y1s.append(y1)
 
-		#apply second sub network to every detected bounding box
-		for i in range(len(images)):    
-			#Resize captured image to be identical with the image size of the training data
-			img = prep_image(images[i], image_size, True)
+		    image = frame[y1:y2, x1:x2]
 
-			#load in gpu
-			img = img.to(device)
+		    #Resize captured image to be identical with the image size of the training data
+		    img = prep_image(image, image_size, True)
 
-			#Prediction
-			output = class_model(img)
-			prediction = output.data.argmax()
-			value, predicted = torch.max(output.data, 1)
+		    #load in gpu
+		    img = img.to(device)
 
-			#Tranform logits to probablities
-			m = nn.Softmax()
-			input = output.data
-			output = m(input)
-			output = np.around(output,2)
-			value, predicted = torch.max(output.data, 1)
+		    #Prediction
+		    output = class_model(img)
+		    prediction = output.data.argmax()
+		    value, predicted = torch.max(output.data, 1)
 
-			#if prediction is not accurate returns empty
-			if (value >= threshold):
-				prediction = class_names[predicted]
-				fontColor = (255, 0, 0)
-				lineType = 4
-			else:
-				prediction = empty
-				fontColor = (255, 255, 0)
-				lineType = 2
+		    #Tranform logits to probablities
+		    m = nn.Softmax()
+		    input = output.data
+		    output = m(input)
+		    output = np.around(output,2)
+		    value, predicted = torch.max(output.data, 1)
 
+		    #if prediction is not accurate returns empty
 
-			#THERE IS A PROBLEM HERE 
-			#cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), fontColor, lineType)
-		    
-			cv2.putText(frame, prediction, (x1s[i] + 10, y1s[i] + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)  
+		    if (value >= threshold):
+		    	prediction = class_names[predicted]
+		    	fontColor = (255, 0, 0)
+		    	lineType = 4
+		    else:
+		    	prediction = empty
+		    	fontColor = (255, 255, 0)
+		    	lineType = 2
 
+		    #THERE IS A PROBLEM HERE 
+		    cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), fontColor, lineType)
 
+		    cv2.putText(frame, prediction, (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)  
 
 
 		#print(f"Found {len(probs)}")
