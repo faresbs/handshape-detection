@@ -15,13 +15,25 @@ import joblib
 
 
 
-def prep_image(image, input_dim, CUDA):
+def prep_image(image, isGray, input_dim, CUDA):
 
 	img = cv2.resize(image, (input_dim, input_dim)) 
+	
 
-	#Normalize and apply std for test example
-	mean = np.array([0.485, 0.456, 0.406])
-	std = np.array([0.229, 0.224, 0.225])
+	if(isGray):
+		img = np.resize(img, (input_dim, input_dim, 3))
+
+	#Normalize test example
+	if (isGray):
+
+		mean = np.array([0.5, 0.5, 0.5])
+		std = np.array([0.5, 0.5, 0.5])
+
+	else:
+		mean = np.array([0.485, 0.456, 0.406])
+		std = np.array([0.229, 0.224, 0.225])
+
+
 	img_ = std * img + mean
 
 	img_ =  img_.transpose((2, 0, 1))
@@ -35,6 +47,10 @@ def prep_image(image, input_dim, CUDA):
 
 	if CUDA:
 		img_ = img_.cuda()
+
+	#Take only one channel for Gray since they are all duplicated channels
+	if(isGray):
+		img_ = img_[:, 0, :, :].unsqueeze(1)
 
 	return img_
 
@@ -68,7 +84,7 @@ if __name__ == '__main__':
 
 	#Loading classification model
 	print("Loading networks...")
-	class_model = cnn.network_vgg16(num_classes)
+	class_model = cnn.Inception3(num_classes=24, channels=1, aux_logits=True)
 	class_model.load_state_dict(torch.load(class_path+'/weights.h5'))
 	print("Classification Network successfully loaded.")
 	    
@@ -88,7 +104,7 @@ if __name__ == '__main__':
 	video_capture = cv2.VideoCapture(0)
 
 	#Image size for classification must identical to network input
-	image_size = 224
+	image_size = 299
 
 	#Classification threshold
 	threshold = 0.2
@@ -97,7 +113,10 @@ if __name__ == '__main__':
 	empty='None'
 
 	#add some space for the detected bounding box
-	add_bbox = 20
+	add_bbox = 30
+
+	#classify grayscale images or rgb
+	isGray = True
 
 	while True:
 
@@ -141,17 +160,13 @@ if __name__ == '__main__':
 		    	y2 = frame.shape[0]
 
 
-		    #images.append(frame[y1:y2, x1:x2])
-		    #x1s.append(x1)
-		    #y1s.append(y1)
-
 		    image = frame[y1:y2, x1:x2]
 
-		    #Resize captured image to be identical with the image size of the training data
-		    img = prep_image(image, image_size, True)
+		    if (isGray):
+		    	image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-		    #load in gpu
-		    img = img.to(device)
+		    #Resize captured image to be identical with the image size of the training data
+		    img = prep_image(image, isGray, image_size, CUDA=True)
 
 		    #Prediction
 		    output = class_model(img)
