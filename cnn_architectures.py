@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
+from torchvision import models
 
 
-class network_vgg16(nn.Module):
+class vgg16(nn.Module):
 
 	def __init__(self, num_classes):
-		super(network_vgg16, self).__init__()
+		super(vgg16, self).__init__()
 		features = list(models.vgg16().features)
 		self.features = nn.ModuleList(features)
 		self.classifier = nn.Sequential(
