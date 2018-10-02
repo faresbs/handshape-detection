@@ -137,6 +137,11 @@ if __name__ == '__main__':
 	#classify grayscale images or rgb
 	#isGray = True
 
+	#Take only two hands and ignore the rest
+	#UNTIL I FIND A THEORETICAL SOLUTION
+	limit = False
+	size = 1
+
 	while True:
 
 		#Start timer
@@ -144,6 +149,9 @@ if __name__ == '__main__':
 
 		# Capture frame-by-frame
 		ret, frame = video_capture.read()
+
+		#Inverse frame
+		frame = cv2.flip(frame, 1)
 
 		image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -155,78 +163,89 @@ if __name__ == '__main__':
 		x1s = []
 		y1s = []
 
+
+		#TO FIX : bbox keep jumping from hand to hand (is there an easy solution for this?)
+		if (boxes.size(0) > size)&(limit):
+			boxes = boxes[0:size, :]
+
+
 		for i in range(boxes.size(0)):
-		    box = boxes[i, :]
 
-		    #Transform from tensor to int
-		    x1 = int(box[0]) - add_bbox
-		    y1 = int(box[1]) - add_bbox
-		    x2 = int(box[2]) + add_bbox
-		    y2 = int(box[3]) + add_bbox
+			box = boxes[i, :]
 
-		    #coords must not exceed the limit of the frame or be negative
+			#Transform from tensor to int and extend the bbox
+			x1 = int(box[0]) - add_bbox
+			y1 = int(box[1]) - add_bbox
+			x2 = int(box[2]) + add_bbox
+			y2 = int(box[3]) + add_bbox
 
-		    if x1 < 0:
-		    	x1 = 0
+			
 
-		    if x2 > frame.shape[1]:
-		    	x2 = frame.shape[1]
+			 #coords must not exceed the limit of the frame or be negative
 
-		    if y1 < 0:
-		    	y1 = 0
+			if x1 < 0:
+				x1 = 0
 
-		    if y2 > frame.shape[0]:
-		    	y2 = frame.shape[0]
+			if x2 > frame.shape[1]:
+				x2 = frame.shape[1]
+
+			if y1 < 0:
+				y1 = 0
+
+			if y2 > frame.shape[0]:
+				y2 = frame.shape[0]
 
 
-		    image = frame[y1:y2, x1:x2]
+			image = frame[y1:y2, x1:x2]
 
-		    if (isGray=='True'):
-		    	image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+			if (isGray=='True'):
+				image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-		    #Resize captured image to be identical with the image size of the training data
-		    img = prep_image(image, isGray, image_size, CUDA=True)
+			#cv2.imshow("image", image)
 
-		    #Prediction
-		    output = class_model(img)
-		    prediction = output.data.argmax()
-		    value, predicted = torch.max(output.data, 1)
+			#Resize captured image to be identical with the image size of the training data
+			img = prep_image(image, isGray, image_size, CUDA=True)
 
-		    #Tranform logits to probablities
-		    m = nn.Softmax()
-		    input = output.data
-		    output = m(input)
-		    output = np.around(output,2)
-		    value, predicted = torch.max(output.data, 1)
+			#Prediction
 
-		    #if prediction is not accurate returns empty
+			output = class_model(img)
+			prediction = output.data.argmax()
+			value, predicted = torch.max(output.data, 1)
 
-		    if (value >= threshold):
-		    	prediction = class_names[predicted]
-		    	fontColor = (255, 0, 0)
-		    	lineType = 4
-		    else:
-		    	prediction = empty
-		    	fontColor = (255, 255, 0)
-		    	lineType = 2
+			#Tranform logits to probablities
+			m = nn.Softmax()
+			input = output.data
+			output = m(input)
+			output = np.around(output,2)
+			value, predicted = torch.max(output.data, 1)
 
-		    #THERE IS A PROBLEM HERE 
-		    cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), fontColor, lineType)
+			#if prediction is not accurate returns empty
 
-		    cv2.putText(frame, prediction, (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)  
+			if (value >= threshold):
+				prediction = class_names[predicted]
+				fontColor = (255, 0, 0)
+				lineType = 4
+			else:
+				prediction = empty
+				fontColor = (255, 255, 0)
+				lineType = 2
 
-		    cv2.imshow("image", image)
+
+
+			cv2.rectangle(frame, (x1, y1), (x2, y2), fontColor, lineType)
+			cv2.putText(frame, prediction, (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)  
+
+		    
 
 		#print(f"Found {len(probs)}")
 
 		stop = timeit.default_timer()
 		running_time = 1/(stop - start)
 		print ("FPS: {:.2f}, Found {:d} objects".format(running_time, len(probs)))
-		#cv2.putText(frame, running_time, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255),2)  
-
+		running_time = int(running_time)
+		cv2.putText(frame, str(running_time) + " FPS", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)  
 		
-		#Show results
-		#frame = cv2.flip(frame, 1)
+		
 		cv2.imshow("Video Stream", frame)
 
 
