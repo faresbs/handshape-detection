@@ -20,11 +20,11 @@ def prep_image(image, isGray, input_dim, CUDA):
 	img = cv2.resize(image, (input_dim, input_dim)) 
 	
 
-	if(isGray):
+	if(isGray=='True'):
 		img = np.resize(img, (input_dim, input_dim, 3))
 
 	#Normalize test example
-	if (isGray):
+	if (isGray=='True'):
 
 		mean = np.array([0.5, 0.5, 0.5])
 		std = np.array([0.5, 0.5, 0.5])
@@ -49,7 +49,7 @@ def prep_image(image, isGray, input_dim, CUDA):
 		img_ = img_.cuda()
 
 	#Take only one channel for Gray since they are all duplicated channels
-	if(isGray):
+	if(isGray=='True'):
 		img_ = img_[:, 0, :, :].unsqueeze(1)
 
 	return img_
@@ -58,11 +58,18 @@ def prep_image(image, isGray, input_dim, CUDA):
 if __name__ == '__main__':
 
 	if len(sys.argv) < 3:
-		print('Usage: python run.py <detection model path>  <detection labels path>  <classification model path>')
+		print('Usage: python run.py <detection model path>  <detection labels path>  <classification model path> <architecture classification model> <image_size> <threshold> <isGray>')
 		sys.exit(0)
 	detection_path = sys.argv[1]
 	label_detection_path = sys.argv[2]
 	class_path = sys.argv[3]
+	arch = sys.argv[4]
+	image_size = sys.argv[5]
+	threshold = sys.argv[6]
+	isGray = sys.argv[7]
+
+	image_size = int(image_size)
+	threshold = float(threshold)
 
 	class_names_detection = [name.strip() for name in open(label_detection_path).readlines()]
 
@@ -73,6 +80,12 @@ if __name__ == '__main__':
 
 	num_classes = len(class_names)
 
+	#if Gray images then number of channels is 1, if images are rgb then 3
+	if (isGray=='True'):
+		c = 1
+	else:
+		c = 3
+
 	print('Handshape labels: '+str(class_names))
 
 	# Device configuration
@@ -82,9 +95,15 @@ if __name__ == '__main__':
 	elif device=='cuda:0':
 		print ("Running on GPU.")
 
+
+
 	#Loading classification model
 	print("Loading networks...")
-	class_model = cnn.Inception3(num_classes=24, channels=1, aux_logits=True)
+	if (arch == 'vgg16'):
+		class_model = cnn.vgg16(num_classes=num_classes)
+	elif (arch == 'inceptionv3'):
+		class_model = cnn.Inception3(num_classes=num_classes, channels=c, aux_logits=True)
+
 	class_model.load_state_dict(torch.load(class_path+'/weights.h5'))
 	print("Classification Network successfully loaded.")
 	    
@@ -104,10 +123,10 @@ if __name__ == '__main__':
 	video_capture = cv2.VideoCapture(0)
 
 	#Image size for classification must identical to network input
-	image_size = 299
+	#image_size = 299
 
 	#Classification threshold
-	threshold = 0.2
+	#threshold = 0.2
 
 	#Empty label
 	empty='None'
@@ -116,7 +135,7 @@ if __name__ == '__main__':
 	add_bbox = 30
 
 	#classify grayscale images or rgb
-	isGray = True
+	#isGray = True
 
 	while True:
 
@@ -162,7 +181,7 @@ if __name__ == '__main__':
 
 		    image = frame[y1:y2, x1:x2]
 
-		    if (isGray):
+		    if (isGray=='True'):
 		    	image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 		    #Resize captured image to be identical with the image size of the training data
@@ -196,6 +215,7 @@ if __name__ == '__main__':
 
 		    cv2.putText(frame, prediction, (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)  
 
+		    cv2.imshow("image", image)
 
 		#print(f"Found {len(probs)}")
 
