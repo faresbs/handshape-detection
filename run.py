@@ -6,7 +6,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 import cnn_architectures as cnn
 import numpy as np
-import cv2 
+import cv2
+import argparse 
 
 import sys
 import time
@@ -57,31 +58,44 @@ def prep_image(image, isGray, input_dim, CUDA):
 
 if __name__ == '__main__':
 
-	if len(sys.argv) < 3:
-		print('Usage: python run.py <detection model path>  <detection labels path>  <classification model path> <architecture classification model> <image_size> <threshold> <isGray>')
-		sys.exit(0)
-	detection_path = sys.argv[1]
-	label_detection_path = sys.argv[2]
-	class_path = sys.argv[3]
-	arch = sys.argv[4]
-	image_size = sys.argv[5]
-	threshold = sys.argv[6]
-	isGray = sys.argv[7]
 
-	image_size = int(image_size)
-	threshold = float(threshold)
+	parser = argparse.ArgumentParser(
+		description='Run the class/detection network')
 
-	class_names_detection = [name.strip() for name in open(label_detection_path).readlines()]
+	parser.add_argument("--detection_path", default='weights/detection/mobilenet-v1-ssd-Epoch-200-Loss-3.0682483695802234.pth', type=str,
+                    help="path of the detection model")
+
+	parser.add_argument("--label_detection_path", default='weights/detection/hand.txt', type=str,
+                    help="temporal or static signs?")
+
+	parser.add_argument("--class_path", default='weights/class/2018-07-21-16:10', type=str,
+                    help="path of the classification model")
+
+	parser.add_argument("--arch", default="vgg16", type=str,
+                    help="classification architecture used")
+
+	parser.add_argument("--image_size", default=224, type=int,
+                    help="Size of the image")
+
+	parser.add_argument("--threshold", default=0.5, type=float,
+                    help="threshold of choosing a label class")
+
+	parser.add_argument("--isGray", default=False, type=bool,
+                    help="input images are RGB or grayscale")
+
+	args = parser.parse_args()
+
+	class_names_detection = [name.strip() for name in open(args.label_detection_path).readlines()]
 
 
 	#Extract class names for the classification task
-	with open(class_path+'/class_names', "rb") as file:
+	with open(args.class_path+'/class_names', "rb") as file:
 		class_names = joblib.load(file)
 
 	num_classes = len(class_names)
 
 	#if Gray images then number of channels is 1, if images are rgb then 3
-	if (isGray=='True'):
+	if (args.isGray==True):
 		c = 1
 	else:
 		c = 3
@@ -99,12 +113,12 @@ if __name__ == '__main__':
 
 	#Loading classification model
 	print("Loading networks...")
-	if (arch == 'vgg16'):
+	if (args.arch == 'vgg16'):
 		class_model = cnn.vgg16(num_classes=num_classes)
 	elif (arch == 'inceptionv3'):
 		class_model = cnn.Inception3(num_classes=num_classes, channels=c, aux_logits=True)
 
-	class_model.load_state_dict(torch.load(class_path+'/weights.h5'))
+	class_model.load_state_dict(torch.load(args.class_path+'/weights.h5'))
 	print("Classification Network successfully loaded.")
 	    
 	#put the model in eval mode to disable dropout
@@ -116,26 +130,18 @@ if __name__ == '__main__':
 
 	#Loading detection model
 	detect_model = create_mobilenetv1_ssd(2, is_test=True)
-	detect_model.load(detection_path)
-	predictor = create_mobilenetv1_ssd_predictor(detect_model, candidate_size=200)
+	detect_model.load(args.detection_path)
+	predictor = create_mobilenetv1_ssd_predictor(detect_model, candidate_size=200, device=device)
 	print("Detection Network successfully loaded.")
 
 	video_capture = cv2.VideoCapture(0)
 
-	#Image size for classification must identical to network input
-	#image_size = 299
-
-	#Classification threshold
-	#threshold = 0.2
 
 	#Empty label
 	empty='None'
 
 	#add some space for the detected bounding box
 	add_bbox = 30
-
-	#classify grayscale images or rgb
-	#isGray = True
 
 	#Take only two hands and ignore the rest
 	#UNTIL I FIND A THEORETICAL SOLUTION
@@ -171,6 +177,7 @@ if __name__ == '__main__':
 
 		for i in range(boxes.size(0)):
 
+			#take box by box
 			box = boxes[i, :]
 
 			#Transform from tensor to int and extend the bbox
@@ -181,8 +188,7 @@ if __name__ == '__main__':
 
 			
 
-			 #coords must not exceed the limit of the frame or be negative
-
+			#coords must not exceed the limit of the frame or be negative
 			if x1 < 0:
 				x1 = 0
 
@@ -196,21 +202,22 @@ if __name__ == '__main__':
 				y2 = frame.shape[0]
 
 
+			#extract th wanted image from the full frame
 			image = frame[y1:y2, x1:x2]
 
-			if (isGray=='True'):
+			if (args.isGray==True):
 				image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 			#cv2.imshow("image", image)
 
 			#Resize captured image to be identical with the image size of the training data
-			img = prep_image(image, isGray, image_size, CUDA=True)
+			img = prep_image(image, args.isGray, args.image_size, CUDA=True)
 
-			#Prediction
-
+			#Prediction class label
 			output = class_model(img)
 			prediction = output.data.argmax()
 			value, predicted = torch.max(output.data, 1)
+
 
 			#Tranform logits to probablities
 			m = nn.Softmax()
@@ -219,9 +226,9 @@ if __name__ == '__main__':
 			output = np.around(output,2)
 			value, predicted = torch.max(output.data, 1)
 
-			#if prediction is not accurate returns empty
 
-			if (value >= threshold):
+			#if prediction is not accurate returns empty
+			if (value >= args.threshold):
 				prediction = class_names[predicted]
 				fontColor = (255, 0, 0)
 				lineType = 4
@@ -231,16 +238,14 @@ if __name__ == '__main__':
 				lineType = 2
 
 
-
+			#Display bounding box with text
 			cv2.rectangle(frame, (x1, y1), (x2, y2), fontColor, lineType)
 			cv2.putText(frame, prediction, (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)  
 
-		    
-
-		#print(f"Found {len(probs)}")
 
 		stop = timeit.default_timer()
 		running_time = 1/(stop - start)
+
 		print ("FPS: {:.2f}, Found {:d} objects".format(running_time, len(probs)))
 		running_time = int(running_time)
 		cv2.putText(frame, str(running_time) + " FPS", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)  

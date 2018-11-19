@@ -4,8 +4,6 @@ import itertools
 from typing import List
 import math
 
-import timeit
-
 SSDBoxSizes = collections.namedtuple('SSDBoxSizes', ['min', 'max'])
 
 SSDSpec = collections.namedtuple('SSDSpec', ['feature_map_size', 'shrinkage', 'box_sizes', 'aspect_ratios'])
@@ -84,11 +82,6 @@ def generate_ssd_priors(specs: List[SSDSpec], image_size, clamp=True) -> torch.T
 
 def convert_locations_to_boxes(locations, priors, center_variance,
                                size_variance):
-
-    
-    #TEMP FIX HERE 
-    priors = priors.cpu()
-
     """Convert regressional location results of SSD into boxes in the form of (center_x, center_y, h, w).
 
     The conversion:
@@ -107,6 +100,7 @@ def convert_locations_to_boxes(locations, priors, center_variance,
     # priors can have one dimension less.
     if priors.dim() + 1 == locations.dim():
         priors = priors.unsqueeze(0)
+        #priors = priors.cpu()
     return torch.cat([
         locations[..., :2] * center_variance * priors[..., 2:] + priors[..., :2],
         torch.exp(locations[..., 2:] * size_variance) * priors[..., 2:]
